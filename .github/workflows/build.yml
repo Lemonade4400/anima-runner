@@ -1,0 +1,34 @@
+# Checks out the private repository Lemonade4400/anima and runs its build script, scripts/build (anima D-0083).
+# The checkout uses a read-only deploy key of anima, stored here as the secret ANIMA_DEPLOY_KEY.
+name: build
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit of anima to build
+        default: main
+  repository_dispatch:
+    types: [build]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: Lemonade4400/anima
+          ref: ${{ inputs.ref || github.event.client_payload.ref || 'main' }}
+          ssh-key: ${{ secrets.ANIMA_DEPLOY_KEY }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Build
+        run: scripts/build
