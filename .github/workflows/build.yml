@@ -1,6 +1,9 @@
 # Checks out the private repository Lemonade4400/anima and runs its build script, scripts/build (anima D-0083).
 # The checkout uses a read-only deploy key of anima, stored here as the secret ANIMA_DEPLOY_KEY.
 # Every output line goes to Better Stack (source anima-ci); this public log shows only step outcomes (anima D-0088).
+# The result is the commit status `build` on anima; a green pull request is merged by anima's scripts/merge
+# (anima D-0084). The token ANIMA_TOKEN is used only in the jobs that do not run anima's code under test, so the
+# code being built can never read it: `pending` before the build, `report` after it, from a checkout of main.
 name: build
 
 on:
@@ -15,17 +18,39 @@ on:
 permissions:
   contents: read
 
+env:
+  ANIMA_REF: ${{ inputs.ref || github.event.client_payload.ref || 'main' }}
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
 jobs:
+  pending:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      commit: ${{ steps.status.outputs.commit }}
+    steps:
+      - name: Status pending
+        id: status
+        env:
+          GH_TOKEN: ${{ secrets.ANIMA_TOKEN }}
+        run: |
+          commit="$(gh api "repos/Lemonade4400/anima/commits/$ANIMA_REF" --jq .sha)"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          gh api --silent "repos/Lemonade4400/anima/statuses/$commit" \
+            -f state=pending -f context=build -f target_url="$RUN_URL"
+
   build:
+    needs: pending
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
         with:
           repository: Lemonade4400/anima
-          ref: ${{ inputs.ref || github.event.client_payload.ref || 'main' }}
+          ref: ${{ needs.pending.outputs.commit }}
           ssh-key: ${{ secrets.ANIMA_DEPLOY_KEY }}
           persist-credentials: false
+          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:
@@ -35,6 +60,36 @@ jobs:
         env:
           LOGTAIL_CI_TOKEN: ${{ secrets.LOGTAIL_CI_TOKEN }}
           LOGTAIL_CI_URL: ${{ vars.LOGTAIL_CI_URL }}
-          ANIMA_REF: ${{ inputs.ref || github.event.client_payload.ref || 'main' }}
           ANIMA_PULL_REQUEST: ${{ github.event.client_payload.pull_request }}
         run: ANIMA_COMMIT="$(git rev-parse HEAD)" scripts/build
+
+  report:
+    needs: [pending, build]
+    if: always() && needs.pending.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Status
+        env:
+          GH_TOKEN: ${{ secrets.ANIMA_TOKEN }}
+          COMMIT: ${{ needs.pending.outputs.commit }}
+          STATE: ${{ needs.build.result == 'success' && 'success' || 'failure' }}
+        run: |
+          gh api --silent "repos/Lemonade4400/anima/statuses/$COMMIT" \
+            -f state="$STATE" -f context=build -f target_url="$RUN_URL"
+
+      - uses: actions/checkout@v7
+        if: needs.build.result == 'success' && github.event.client_payload.pull_request
+        with:
+          repository: Lemonade4400/anima
+          ref: main
+          ssh-key: ${{ secrets.ANIMA_DEPLOY_KEY }}
+          persist-credentials: false
+
+      - name: Merge
+        if: needs.build.result == 'success' && github.event.client_payload.pull_request
+        env:
+          ANIMA_TOKEN: ${{ secrets.ANIMA_TOKEN }}
+          ANIMA_PULL_REQUEST: ${{ github.event.client_payload.pull_request }}
+          ANIMA_COMMIT: ${{ needs.pending.outputs.commit }}
+        run: scripts/merge
