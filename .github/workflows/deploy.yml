@@ -1,0 +1,54 @@
+# Checks out the private repository Lemonade4400/anima and runs its deploy script, scripts/deploy (anima D-0088):
+# arm64 image, Trivy, ECR, deploy to dev through SSM, web to S3, smoke test, ZAP. AWS access through OIDC; the
+# role trusts only the main branch of this repository. Every output line goes to Better Stack (source anima-ci);
+# this public log shows only step outcomes. One deploy at a time.
+name: deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit of anima to deploy to dev
+        default: main
+  repository_dispatch:
+    types: [deploy]
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: Lemonade4400/anima
+          ref: ${{ inputs.ref || github.event.client_payload.ref || 'main' }}
+          ssh-key: ${{ secrets.ANIMA_DEPLOY_KEY }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Deploy
+        env:
+          LOGTAIL_CI_TOKEN: ${{ secrets.LOGTAIL_CI_TOKEN }}
+          LOGTAIL_CI_URL: ${{ vars.LOGTAIL_CI_URL }}
+          ANIMA_REF: ${{ inputs.ref || github.event.client_payload.ref || 'main' }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          ECR_REPOSITORY_URL: ${{ vars.ECR_REPOSITORY_URL }}
+          DEPLOY_DOCUMENT: ${{ vars.DEPLOY_DOCUMENT }}
+          DEPLOY_INSTANCE_ID: ${{ vars.DEPLOY_INSTANCE_ID }}
+          WEB_BUCKET: ${{ vars.WEB_BUCKET }}
+          CLOUDFRONT_DISTRIBUTION: ${{ vars.CLOUDFRONT_DISTRIBUTION }}
+          REPORTS_BUCKET: ${{ vars.REPORTS_BUCKET }}
+          DEV_URL: ${{ vars.DEV_URL }}
+        run: ANIMA_COMMIT="$(git rev-parse HEAD)" scripts/deploy

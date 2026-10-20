@@ -1,5 +1,6 @@
 # Checks out the private repository Lemonade4400/anima and runs its build script, scripts/build (anima D-0083).
 # The checkout uses a read-only deploy key of anima, stored here as the secret ANIMA_DEPLOY_KEY.
+# Every output line goes to Better Stack (source anima-ci); this public log shows only step outcomes (anima D-0088).
 name: build
 
 on:
@@ -31,4 +32,9 @@ jobs:
           node-version: 24
 
       - name: Build
-        run: scripts/build
+        env:
+          LOGTAIL_CI_TOKEN: ${{ secrets.LOGTAIL_CI_TOKEN }}
+          LOGTAIL_CI_URL: ${{ vars.LOGTAIL_CI_URL }}
+          ANIMA_REF: ${{ inputs.ref || github.event.client_payload.ref || 'main' }}
+          ANIMA_PULL_REQUEST: ${{ github.event.client_payload.pull_request }}
+        run: ANIMA_COMMIT="$(git rev-parse HEAD)" scripts/build
