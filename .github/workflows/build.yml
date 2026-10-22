@@ -52,6 +52,25 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+      # The build tests the pull request merged with the current main, not its head alone (anima D-0117). The
+      # commit status and scripts/merge keep referring to the head, needs.pending.outputs.commit. A commit that
+      # main already contains (a dispatch of main itself) has nothing to merge.
+      - name: Merge main
+        env:
+          ANIMA_PULL_REQUEST: ${{ github.event.client_payload.pull_request }}
+        run: |
+          if git merge-base --is-ancestor HEAD origin/main; then
+            echo "main already contains this commit: nothing to merge."
+            exit 0
+          fi
+          name="${ANIMA_PULL_REQUEST:+Pull request #$ANIMA_PULL_REQUEST}"
+          if ! git -c user.name=anima-runner -c user.email=anima-runner@users.noreply.github.com \
+            merge --no-edit origin/main > /dev/null 2>&1; then
+            echo "::error::${name:-$ANIMA_REF} conflicts with main: merge main into the branch and push."
+            exit 1
+          fi
+          echo "Building the commit merged with main $(git rev-parse --short origin/main)."
+
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -83,7 +102,8 @@ jobs:
           LOGTAIL_CI_TOKEN: ${{ secrets.LOGTAIL_CI_TOKEN }}
           LOGTAIL_CI_URL: ${{ vars.LOGTAIL_CI_URL }}
           ANIMA_PULL_REQUEST: ${{ github.event.client_payload.pull_request }}
-        run: ANIMA_COMMIT="$(git rev-parse HEAD)" scripts/build
+          ANIMA_COMMIT: ${{ needs.pending.outputs.commit }}
+        run: scripts/build
 
   report:
     needs: [pending, build]

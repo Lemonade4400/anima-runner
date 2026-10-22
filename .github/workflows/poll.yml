@@ -1,7 +1,8 @@
 # Polls the private repository Lemonade4400/anima every five minutes (anima D-0117): anima keeps no secret and no
 # workflow of its own, so this one starts what its dispatch workflow used to. A build for every open pull request
 # head without a `build` status; a merge attempt (anima's scripts/merge, from main) for every open, non-draft pull
-# request whose head is green; a deploy for the head of main without a `deploy` status. The pending status is
+# request whose head is green; a deploy for the head of main without a `deploy` status, unless everything since the
+# last deployed commit is documentation (then only the status `deploy` = success is posted). The pending status is
 # posted here before the dispatch, so a slow start never doubles a build or a deploy.
 name: poll
 
@@ -66,9 +67,39 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.ANIMA_TOKEN }}
         run: |
+          # The newest of the last 50 commits of main with a `deploy` status (deployed, or skipped below); none: empty.
+          last_deployed() {
+            local commit
+            for commit in $(gh api "repos/$ANIMA/commits?sha=main&per_page=50" --jq '.[].sha'); do
+              if [ "$(gh api "repos/$ANIMA/commits/$commit/status" --jq 'any(.statuses[]; .context == "deploy")')" = true ]; then
+                echo "$commit"
+                return
+              fi
+            done
+          }
+          # True when every file changed from $1 to $2 is documentation, the rule of anima's .githooks/pre-push
+          # (anima D-0086): *.md, kb/, docs/, .nimbalyst/. A failed comparison is not documentation.
+          documentation_only() {
+            local file
+            gh api --paginate "repos/$ANIMA/compare/$1...$2?per_page=100" \
+              --jq '.files[] | .filename, (.previous_filename // empty)' > "$RUNNER_TEMP/changed" || return 1
+            while IFS= read -r file; do
+              case "$file" in
+                *.md | kb/* | docs/* | .nimbalyst/*) ;;
+                *) return 1 ;;
+              esac
+            done < "$RUNNER_TEMP/changed"
+          }
+
           sha="$(gh api "repos/$ANIMA/commits/main" --jq .sha)"
           state="$(gh api "repos/$ANIMA/commits/$sha/status" --jq '[.statuses[] | select(.context == "deploy")][0].state // "none"')"
-          if [ "$state" = none ]; then
+          last=""
+          [ "$state" != none ] || last="$(last_deployed)"
+          if [ -n "$last" ] && documentation_only "$last" "$sha"; then
+            gh api --silent "repos/$ANIMA/statuses/$sha" -f state=success -f context=deploy \
+              -f description="documentation only, not deployed" -f target_url="$RUN_URL"
+            echo "main $sha: documentation only since $last, not deployed"
+          elif [ "$state" = none ]; then
             gh api --silent "repos/$ANIMA/statuses/$sha" -f state=pending -f context=deploy -f target_url="$RUN_URL"
             gh api --silent "repos/$RUNNER/dispatches" -f event_type=deploy -f "client_payload[ref]=$sha"
             echo "main $sha: deploy started"
