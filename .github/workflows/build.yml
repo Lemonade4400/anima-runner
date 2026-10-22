@@ -65,10 +65,10 @@ jobs:
             exit 0
           fi
           paths=()
-          while read -r path; do paths+=("$path"); done < <(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$RUNNER_TEMP/protected")
-          for path in "${paths[@]}"; do
-            rm -rf -- "$path"
-            git checkout -q origin/main -- "$path" 2>/dev/null || true
+          while read -r item; do paths+=("$item"); done < <(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$RUNNER_TEMP/protected")
+          for item in "${paths[@]}"; do
+            rm -rf -- "$item"
+            git checkout -q origin/main -- "$item" 2>/dev/null || true
           done
           changed="$(git diff --name-only HEAD -- "${paths[@]}")"
           if [ -n "$changed" ]; then
