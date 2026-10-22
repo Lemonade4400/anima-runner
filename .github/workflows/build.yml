@@ -56,6 +56,28 @@ jobs:
         with:
           node-version: 24
 
+      # The harness runs from main, never from the code under test (anima D-0117): every path listed in main's
+      # scripts/protected is restored from main. A change to one of them takes effect from the next build.
+      - name: Harness from main
+        run: |
+          if ! git show origin/main:scripts/protected > "$RUNNER_TEMP/protected" 2>/dev/null; then
+            echo "main has no scripts/protected: nothing to restore"
+            exit 0
+          fi
+          paths=()
+          while read -r path; do paths+=("$path"); done < <(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$RUNNER_TEMP/protected")
+          for path in "${paths[@]}"; do
+            rm -rf -- "$path"
+            git checkout -q origin/main -- "$path" 2>/dev/null || true
+          done
+          changed="$(git diff --name-only HEAD -- "${paths[@]}")"
+          if [ -n "$changed" ]; then
+            echo "Protected paths changed by this commit, built with main's version (they take effect from the next build):"
+            echo "$changed"
+          else
+            echo "No protected path changed: the harness is main's."
+          fi
+
       - name: Build
         env:
           LOGTAIL_CI_TOKEN: ${{ secrets.LOGTAIL_CI_TOKEN }}
