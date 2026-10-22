@@ -21,6 +21,9 @@ permissions:
   contents: read
   id-token: write
 
+env:
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
 jobs:
   deploy:
     runs-on: ubuntu-24.04-arm
@@ -52,3 +55,13 @@ jobs:
           REPORTS_BUCKET: ${{ vars.REPORTS_BUCKET }}
           DEV_URL: ${{ vars.DEV_URL }}
         run: ANIMA_COMMIT="$(git rev-parse HEAD)" scripts/deploy
+
+      # The commit status `deploy` on anima tells the poll workflow (anima D-0117) that this head was deployed.
+      - name: Status
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.ANIMA_TOKEN }}
+          STATE: ${{ job.status == 'success' && 'success' || 'failure' }}
+        run: |
+          gh api --silent "repos/Lemonade4400/anima/statuses/$(git rev-parse HEAD)" \
+            -f state="$STATE" -f context=deploy -f target_url="$RUN_URL"
