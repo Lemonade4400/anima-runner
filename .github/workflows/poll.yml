@@ -1,5 +1,7 @@
-# Polls the private repository Lemonade4400/anima every five minutes (anima D-0117): anima keeps no secret and no
-# workflow of its own, so this one starts what its dispatch workflow used to. A build for every open pull request
+# Polls the private repository Lemonade4400/anima (anima D-0117): anima keeps no secret and no workflow of its own,
+# so this one starts what its dispatch workflow used to. Every fifteen minutes on GitHub's schedule, and within
+# thirty seconds from the user's Mac when anima has work (anima's scripts/poll through launchd, D-0119): GitHub's
+# schedule fired once in its first ninety minutes. A build for every open pull request
 # head without a `build` status; a merge attempt (anima's scripts/merge, from main) for every open, non-draft pull
 # request whose head is green; a deploy for the head of main without a `deploy` status, unless everything since the
 # last successfully deployed commit is documentation (then only the status `deploy` = success is posted). The
@@ -8,9 +10,8 @@ name: poll
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
-  # Also right after every build or deploy, so a merge is deployed without waiting for the next tick; the schedule
-  # had not fired once in the first hour after this workflow was pushed (2026-10-22).
+    - cron: '*/15 * * * *'
+  # Also right after every build or deploy, so a merge is deployed without waiting for the next tick.
   workflow_run:
     workflows: [build, deploy]
     types: [completed]
