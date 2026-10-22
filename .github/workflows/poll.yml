@@ -2,8 +2,8 @@
 # workflow of its own, so this one starts what its dispatch workflow used to. A build for every open pull request
 # head without a `build` status; a merge attempt (anima's scripts/merge, from main) for every open, non-draft pull
 # request whose head is green; a deploy for the head of main without a `deploy` status, unless everything since the
-# last deployed commit is documentation (then only the status `deploy` = success is posted). The pending status is
-# posted here before the dispatch, so a slow start never doubles a build or a deploy.
+# last successfully deployed commit is documentation (then only the status `deploy` = success is posted). The
+# pending status is posted here before the dispatch, so a slow start never doubles a build or a deploy.
 name: poll
 
 on:
@@ -67,22 +67,26 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.ANIMA_TOKEN }}
         run: |
-          # The newest of the last 50 commits of main with a `deploy` status (deployed, or skipped below); none: empty.
+          # The newest of the last 50 commits of main whose `deploy` status is success (deployed, or skipped below);
+          # none: empty. A failed or pending deploy is not an anchor, so its code is deployed again.
           last_deployed() {
             local commit
             for commit in $(gh api "repos/$ANIMA/commits?sha=main&per_page=50" --jq '.[].sha'); do
-              if [ "$(gh api "repos/$ANIMA/commits/$commit/status" --jq 'any(.statuses[]; .context == "deploy")')" = true ]; then
+              if [ "$(gh api "repos/$ANIMA/commits/$commit/status" \
+                --jq 'any(.statuses[]; .context == "deploy" and .state == "success")')" = true ]; then
                 echo "$commit"
                 return
               fi
             done
           }
           # True when every file changed from $1 to $2 is documentation, the rule of anima's .githooks/pre-push
-          # (anima D-0086): *.md, kb/, docs/, .nimbalyst/. A failed comparison is not documentation.
+          # (anima D-0086): *.md, kb/, docs/, .nimbalyst/. A failed comparison is not documentation. The files come
+          # only on the first page and stop at 300: a list that long may hide code, so it is not documentation.
           documentation_only() {
             local file
             gh api --paginate "repos/$ANIMA/compare/$1...$2?per_page=100" \
-              --jq '.files[] | .filename, (.previous_filename // empty)' > "$RUNNER_TEMP/changed" || return 1
+              --jq '(.files // []) | if length >= 300 then "(300 files or more)"
+                else .[] | .filename, (.previous_filename // empty) end' > "$RUNNER_TEMP/changed" || return 1
             while IFS= read -r file; do
               case "$file" in
                 *.md | kb/* | docs/* | .nimbalyst/*) ;;
