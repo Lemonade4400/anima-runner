@@ -1,0 +1,59 @@
+# Deploys a release tag of the private repository Lemonade4400/anima to production (anima D-0055, D-0113): the same
+# scripts/deploy as dev, with the variables of the GitHub environment `production`. The production deploy role trusts
+# only jobs of that environment. Every output line goes to Better Stack (source anima-ci); this public log shows only
+# step outcomes. One production deploy at a time.
+name: deploy-production
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Release tag of anima to deploy (v*)
+        required: true
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04-arm
+    environment: production
+    timeout-minutes: 45
+    steps:
+      - name: Release tags only
+        env:
+          REF: ${{ inputs.ref }}
+        run: '[[ "$REF" == v* ]] || { echo "production deploys v* tags only, got $REF"; exit 1; }'
+
+      - uses: actions/checkout@v7
+        with:
+          repository: Lemonade4400/anima
+          ref: refs/tags/${{ inputs.ref }}
+          ssh-key: ${{ secrets.ANIMA_DEPLOY_KEY }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Deploy
+        env:
+          LOGTAIL_CI_TOKEN: ${{ secrets.LOGTAIL_CI_TOKEN }}
+          LOGTAIL_CI_URL: ${{ vars.LOGTAIL_CI_URL }}
+          ANIMA_REF: ${{ inputs.ref }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          ECR_REPOSITORY_URL: ${{ vars.ECR_REPOSITORY_URL }}
+          DEPLOY_DOCUMENT: ${{ vars.DEPLOY_DOCUMENT }}
+          DEPLOY_INSTANCE_ID: ${{ vars.DEPLOY_INSTANCE_ID }}
+          WEB_BUCKET: ${{ vars.WEB_BUCKET }}
+          CLOUDFRONT_DISTRIBUTION: ${{ vars.CLOUDFRONT_DISTRIBUTION }}
+          REPORTS_BUCKET: ${{ vars.REPORTS_BUCKET }}
+          DEPLOY_URL: ${{ vars.DEPLOY_URL }}
+          IMAGE_RECORDS_PATH: ${{ vars.IMAGE_RECORDS_PATH }}
+        run: ANIMA_COMMIT="$(git rev-parse HEAD)" scripts/deploy
