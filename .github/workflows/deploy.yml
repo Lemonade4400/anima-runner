@@ -54,6 +54,13 @@ jobs:
           CLOUDFRONT_DISTRIBUTION: ${{ vars.CLOUDFRONT_DISTRIBUTION }}
           REPORTS_BUCKET: ${{ vars.REPORTS_BUCKET }}
           DEV_URL: ${{ vars.DEV_URL }}
+          # Sentry (anima D-0099): the web build reports and uploads its source maps, the watch counts the release.
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_URL: ${{ vars.SENTRY_URL }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECTS: ${{ vars.SENTRY_PROJECTS }}
+          SENTRY_WEB_DSN: ${{ vars.SENTRY_WEB_DSN }}
+          SENTRY_ENVIRONMENT: ${{ vars.SENTRY_ENVIRONMENT }}
         run: ANIMA_COMMIT="$(git rev-parse HEAD)" scripts/deploy
 
       # The commit status `deploy` on anima tells the poll workflow (anima D-0117) that this head was deployed.

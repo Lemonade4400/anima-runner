@@ -56,4 +56,11 @@ jobs:
           REPORTS_BUCKET: ${{ vars.REPORTS_BUCKET }}
           DEPLOY_URL: ${{ vars.DEPLOY_URL }}
           IMAGE_RECORDS_PATH: ${{ vars.IMAGE_RECORDS_PATH }}
+          # Sentry (anima D-0099): the environment `production` sets its own SENTRY_WEB_DSN and SENTRY_ENVIRONMENT.
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_URL: ${{ vars.SENTRY_URL }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECTS: ${{ vars.SENTRY_PROJECTS }}
+          SENTRY_WEB_DSN: ${{ vars.SENTRY_WEB_DSN }}
+          SENTRY_ENVIRONMENT: ${{ vars.SENTRY_ENVIRONMENT }}
         run: ANIMA_COMMIT="$(git rev-parse HEAD)" scripts/deploy
