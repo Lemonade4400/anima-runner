@@ -4,6 +4,7 @@ Two actions that check out the private repository `anima` and run its scripts (a
 
 - `build`: `scripts/build` (security scans, lint, typecheck, tests, build).
 - `deploy`: `scripts/deploy` (arm64 image, scan, deploy to dev on AWS, smoke test, ZAP).
+- `scan`: `scripts/scan` on what dev and production run, twice a month and beside each production deploy (anima D-0656).
 
 Every output line goes to Better Stack (source `anima-ci`); the logs here show only step outcomes and are kept one
 day.
