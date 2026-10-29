@@ -42,7 +42,10 @@ jobs:
   build:
     needs: pending
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # 75, not 45: on a clean checkout, with no vitest cache, the static mutants of the hooks run the whole suite and
+    # the mutation gate alone went past 45 minutes twice (pull request #176, 2026-10-29). Same cause as Stryker's
+    # dry run raised to 15 minutes (anima D-0543); minutes are free on a public runner (anima D-0673).
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v7
         with:
