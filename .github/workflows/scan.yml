@@ -1,0 +1,77 @@
+# The periodic read-only vulnerability scan of anima (anima D-0640, D-0656): anima's scripts/scan on the image and the
+# lockfile that dev and production run, every severity. Twice a month, so no two scans are more than 30 days apart,
+# on dispatch, and beside every production deploy (deploy-production.yml calls it; the deploy does not wait for it).
+# Every output line goes to Better Stack (source anima-ci); this public log shows only step outcomes, and nothing is
+# kept as an artifact. A critical or high finding fails the job.
+name: scan
+
+on:
+  schedule:
+    - cron: '0 6 1,15 * *'
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      dev:
+        description: Scan dev as well as production
+        type: boolean
+        default: true
+
+concurrency:
+  group: scan
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  # The dev deploy role trusts only jobs of this repository's main without an environment (anima D-0055).
+  dev:
+    if: github.event_name != 'workflow_call' || inputs.dev
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: Lemonade4400/anima
+          ref: main
+          ssh-key: ${{ secrets.ANIMA_DEPLOY_KEY }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Scan
+        env:
+          LOGTAIL_CI_TOKEN: ${{ secrets.LOGTAIL_CI_TOKEN }}
+          LOGTAIL_CI_URL: ${{ vars.LOGTAIL_CI_URL }}
+          ANIMA_REF: main
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          ECR_REPOSITORY_URL: ${{ vars.ECR_REPOSITORY_URL }}
+          REPORTS_BUCKET: ${{ vars.REPORTS_BUCKET }}
+        run: scripts/scan
+
+  # The production deploy role trusts only jobs of the environment `production` (anima D-0113).
+  production:
+    runs-on: ubuntu-24.04-arm
+    environment: production
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: Lemonade4400/anima
+          ref: main
+          ssh-key: ${{ secrets.ANIMA_DEPLOY_KEY }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Scan
+        env:
+          LOGTAIL_CI_TOKEN: ${{ secrets.LOGTAIL_CI_TOKEN }}
+          LOGTAIL_CI_URL: ${{ vars.LOGTAIL_CI_URL }}
+          ANIMA_REF: main
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          ECR_REPOSITORY_URL: ${{ vars.ECR_REPOSITORY_URL }}
+          REPORTS_BUCKET: ${{ vars.REPORTS_BUCKET }}
+          IMAGE_RECORDS_PATH: ${{ vars.IMAGE_RECORDS_PATH }}
+        run: scripts/scan

@@ -20,6 +20,13 @@ permissions:
   id-token: write
 
 jobs:
+  # The periodic scan of anima D-0656, beside the deploy and before it is done: dev runs the commit about to be
+  # released, production the release before it. The deploy does not wait for it: anima D-0640 allows 7 and 30 days
+  # for a high or critical without a fix, and the deploy's own trivy still blocks those with one.
+  scan:
+    uses: ./.github/workflows/scan.yml
+    secrets: inherit
+
   deploy:
     runs-on: ubuntu-24.04-arm
     environment: production
